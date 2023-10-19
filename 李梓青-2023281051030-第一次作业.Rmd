@@ -1,0 +1,493 @@
+---
+title: "对于武汉市二手房房价的一些探讨"
+author:
+  - 李梓青
+documentclass: ctexart
+keywords:
+  - 中文
+  - R Markdown
+output:
+  rticles::ctex:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+---
+
+
+
+
+
+
+
+
+
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+#load library
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(patchwork)
+library(ggrepel)
+library(ggplot2)
+library(gridExtra)
+library(gplots)
+library(showtext)
+showtext_auto(enable = TRUE)
+windowsFonts("MyFont" = windowsFont("Songti SC"))
+
+```
+
+
+# 你的主要发现
+
+1. 武汉市二手房的普遍价格在2万/平以内且中等户型更多
+
+2. 2-3房的二手房反而能卖出更高价格
+  
+3. 各种变量因素对高价二手房的价格影响更多
+    
+
+# 数据介绍
+
+本报告**链家**数据获取方式如下：
+    
+报告人在2023年9月12日获取了[链家武汉二手房网站](https://wh.lianjia.com/ershoufang/)数据。
+    
+- 链家二手房网站默认显示100页，每页30套房产，因此本数据包括3000套房产信息；
+    
+- 数据包括了页面可见部分的文本信息，具体字段及说明见作业说明。
+
+ **说明：**数据仅用于教学；由于不清楚链家数据的展示规则，因此数据可能并不是武汉二手房市场的随机抽样，结论很可能有很大的偏差，甚至可能是错误的。
+
+```{r}
+data <-read_csv("C:/Users/Shirl/Documents/2023-09-12_cleaned.csv")
+
+```
+
+# 数据概览
+
+表的前10行示例如下：
+
+```{r}
+head(data,10)
+```
+
+各变量的简短信息：
+```{r}
+glimpse(data)
+```
+
+各变量的简短统计：
+
+```{r}
+summary(data)
+```
+
+可以看到：
+
+
+-1. 武汉市二手房房屋总价相差极大，最低只需要10万，最高1380万，但是绝大多数总价都不到两百万。房屋总价均值为155.9万，中位数为137万。
+
+-2. 武汉市二手房房屋单价价相差极大，最低1771元/平，最高44656元/平，但是绝大多数都在2万/平以内。
+
+-3. 武汉市二手房的房间数主要还是以2房或者3房居多。大多数都有1个或者2个客厅。
+
+-4. 武汉市二手房的建筑面积最小只有22.77平方米，最大有588.66平方米，中位数是95.55平方米，均值100.87平方米。
+
+也就是说小户型卖的并不多，100平左右，甚至100平以上的房子卖的挺多的。
+
+-5. 武汉市二手房房屋在所在楼栋所处位置最低在2楼，最高在62楼，中位数为27楼。绝大多数房屋都在10楼到33楼之间，也就是说房屋在中间楼层的卖的更多。
+
+-6. 在该二手房网站的关注人数均值为6.6人，中位数是3个人。最火爆的房屋有262个人关注，但是有的房屋无人关注。
+
+# 探索性分析
+
+## 房屋单价和房屋总价与房屋面积的关系
+
+```{r}
+
+p1 <- ggplot(data, aes(price_ttl)) + geom_histogram(binwidth=0.5, fill="blue")
+
+p2 <- ggplot(data, aes(building_area)) + geom_histogram(binwidth=0.5, fill="blue")
+
+p3 <- ggplot(data, aes(x = building_area, y = price_sqm)) +
+  geom_point(color = "blue") +
+  labs(x = "Building Area (sqm)", y = "Price (CNY)") +
+  ggtitle("Building Area vs Price")
+
+
+p4 <- ggplot(data, aes(x = price_ttl, y = price_sqm)) +
+  geom_point(color = "blue") +
+  labs(x = "Total Price (CNY)", y = "Price (CNY)") +
+  ggtitle("Total Price vs Price")
+
+p5 <- ggplot(data, aes(x = price_ttl, y = building_area)) +
+  geom_point(color = "blue") +
+  labs(x = "Total Price (CNY)", y = "Building Area (sqm)") +
+  ggtitle("Total Price vs Building Area")
+grid.arrange(p1, p2,p3,p4,p5, nrow=3)
+
+```
+可以看到：
+
+-从直方图中可以看出房屋总价和单价曲线呈现右偏的趋势，但是分部趋势不完全相同，
+里面一定有一些其他因素扰动。
+
+600万以上总价和300万以上建筑面积在分析的时候可以作为异常值剔除掉。
+
+-从散点图可以看出，单价和总价，建筑面积和总价正相关。
+均价高的地方和建筑面积相关性没那么强，其中一定有其他因素的影响。
+
+
+
+## 房屋数量对房屋单价的影响
+
+```{r}
+p1 <- ggplot(data, aes(x = factor(bedrooms), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "price_sqm", y = "bedrooms") +
+  ggtitle("房间数对价格的影响")
+
+p2 <- ggplot(data, aes(x = factor(livingrooms), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "livingrooms", y = "price_sqm") +
+  ggtitle("房价和客厅数的关系")
+
+grid.arrange(p1, p2, nrow=1)
+```
+
+
+
+发现：
+
+- 房屋价格的中位数随着房间数的增加会略微上升，但不是非常显著。
+
+- 对于有五间房屋的房子，房屋单价相差特别大
+
+- 有两个厅的房子房价是相对更高的。
+
+## 层高对房屋单价的影响
+
+```{r}
+
+average_prices <- data %>%
+  group_by(property_t_height) %>%
+  summarise(avg_price = mean(price_sqm))
+
+
+ggplot(average_prices, aes(x = property_t_height, y = avg_price)) +
+ geom_smooth()
+```
+
+
+
+```{r}
+ggplot(data, aes(x = factor(property_height), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "property_height", y = "price_sqm") +
+  ggtitle("房价和层高之间的关系")
+```
+发现：
+
+- 15到20楼的房价最低；40-55的房价最高。
+
+- 对于房屋总体而言，低中高层对房价的影响不是很显著，低层房价比高层和中层房价更高一点。
+
+
+## 地铁对房屋单价的影响
+
+
+```{r}
+data_1 <- data %>%
+  filter(is.na(near_subway)|near_subway=="近地铁")
+
+ggplot(data_1, aes(x = factor(near_subway ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "near_subway", y = "price_sqm") +
+  ggtitle("地铁对房屋单价的影响")
+```
+发现：
+
+-靠近地铁的房价会更高一些
+
+## 装修对房屋单价的影响
+
+```{r}
+ggplot(data, aes(x = factor(decoration ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "decoration", y = "price_sqm") +
+  ggtitle("装修对房屋单价的影响")
+```
+发现：
+
+-装修程度对二手房影响挺大的。精装的价格普遍高于简装高于毛坯
+
+
+## 建筑形式对房屋单价的影响
+```{r}
+ggplot(data, aes(x = factor(property_style), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "decoration", y = "price_sqm") +
+  ggtitle("建筑形式对房屋单价的影响")
+```
+
+发现:
+
+-塔楼的房价略高于板楼
+
+-板塔结合是大家最喜欢的建筑形式，价格更高
+
+
+
+## 房本是否满两年对房价的影响
+```{r}
+ggplot(data, aes(x = factor(if_2y ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "if_2y", y = "price_sqm") +
+  ggtitle("房本是否满两年")
+```
+发现：
+
+房本是否满两年对房价的影响并不是特别大。房本满两年的房子会略高于未满两年的房子，这应该是由于税的影响。但是从极值看，对高价房屋来说，没什么影响，这也许是因为有钱人对税费没那么敏感。
+
+
+#房屋主要朝向对房价的影响
+```{r}
+
+
+ggplot(data, aes(x = factor(directions1 ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "directions1", y = "price_sqm") +
+  ggtitle("房屋朝向对房价的影响")
+```
+发现: 房屋朝向对房价影响不是特别显著
+
+
+
+
+## 高价房屋是否有其特殊的地方呢
+
+
+```{r}
+ top_n <- 20  # 想要找出的最高房价的地方数量
+top_places <- data[order(-data$price_sqm), ][1:top_n, ]
+
+# 输出最高房价的地方
+print(top_places)
+```
+
+发现：
+
+房屋单价最高的地方几乎很集中，中北路，黄埔永清，二七，南湖沃尔玛。
+
+大胆猜测一些，这些可能是学区房。复地东湖国际对应武昌实验小学（中北路），
+华发外滩首府（黄埔永清）和中信泰富（二七）对应七一中学。
+
+可惜这里没有具体的学区信息。和地图进行进一步对比太复杂了。
+
+
+
+
+
+
+## 探索各因素对于高价房屋的影响
+
+
+```{r}
+high_price_houses <- data[data$price_sqm >= 30000, ]
+
+
+p1 <- ggplot(high_price_houses, aes(x = building_area, y = price_sqm)) +
+  geom_point(color = "blue") +
+  geom_smooth(se = FALSE)+
+  labs(x = "Building Area (sqm)", y = "Price (CNY)") +
+  ggtitle("Scatter Plot of Building Area vs Price")
+
+
+p2 <- ggplot(high_price_houses, aes(x = price_ttl, y = price_sqm)) +
+  geom_point(color = "blue") +
+  geom_smooth(se = FALSE)+
+  labs(x = "Total Price (CNY)", y = "Price (CNY)") +
+  ggtitle("Total Price vs Price")
+
+p3 <- ggplot(high_price_houses, aes(x = price_ttl, y = building_area)) +
+  geom_point(color = "blue") +
+  geom_smooth(se = FALSE)+
+  labs(x = "Total Price (CNY)", y = "Building Area (sqm)") +
+  ggtitle("Total Price vs Building Area (sqm)")
+
+
+grid.arrange(p1, p2,p3, nrow=3)
+
+```
+
+发现:
+
+-和总体比，房屋的建筑面积和房屋总价的相关性变高了
+
+
+#总体热力图与高价房屋热力图进行对比
+
+```{r}
+selected_data <- data[c("price_ttl", "price_sqm", "livingrooms", "bedrooms","building_area",
+                        "followers","property_t_height")]
+correlation_matrix <- cor(selected_data)
+heatmap(correlation_matrix, 
+        col = colorRampPalette(c("blue", "white", "red"))(20),  # 定义颜色范围
+        main = "Correlation Heatmap",  # 图表标题
+        xlab = colnames(correlation_matrix), ylab = colnames(correlation_matrix),  # X和Y轴标签
+        margins = c(8, 10),  # 设置边距
+        cex.lab = 1.5, cex.axis = 1.5,  # 设置标签文本大小
+        key.title = NULL,  # 不显示颜色键标题
+        symm = TRUE  # 对称显示
+)
+```
+```{r}
+selected_data <- high_price_houses[c("price_ttl", "price_sqm", "livingrooms", "bedrooms","building_area",
+                        "followers","property_t_height")]
+correlation_matrix <- cor(selected_data)
+heatmap(correlation_matrix, 
+        col = colorRampPalette(c("blue", "white", "red"))(20),  # 定义颜色范围
+        main = "Correlation Heatmap",  # 图表标题
+        xlab = colnames(correlation_matrix), ylab = colnames(correlation_matrix),  # X和Y轴标签
+        margins = c(8, 10),  # 设置边距
+        cex.lab = 1.5, cex.axis = 1.5,  # 设置标签文本大小
+        key.title = NULL,  # 不显示颜色键标题
+        symm = TRUE  # 对称显示
+)
+```
+
+
+
+发现：
+
+- 和总体热力图相比，高价房屋的热力图红色增加，深蓝色减少。各个变量对高价二手房的影响更深
+
+- 对于高价房屋来说，房屋的面积和房间的数量和房价相关性很高。
+这个结论和前面的线型图是对应的。
+
+
+
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(bedrooms), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "price_sqm", y = "bedrooms") +
+  ggtitle("房间数对价格的影响")
+
+```
+发现：
+
+-对于高价房屋来说，房屋单价范围比较接近
+
+-有三四间房屋的房子房价偏高一些
+
+-但是最高单价的房屋是只有2间房的
+
+
+```{r}
+
+
+ggplot(high_price_houses, aes(x = factor(livingrooms), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "livingrooms", y = "price_sqm") +
+  ggtitle("房价和客厅数的关系")
+
+```
+发现:
+
+-对于高价房屋来说，有两个厅的房子普遍更贵一些
+
+```{r}
+average_prices1 <- high_price_houses %>%
+  group_by(property_t_height) %>%
+  summarise(avg_price = mean(price_sqm))
+
+
+ggplot(average_prices1, aes(x = property_t_height, y = avg_price)) +
+ geom_smooth()
+```
+发现:
+
+-在高价房屋中，18楼左右或者50楼以上的房价会更高一些。和前面相比，层高对价格的影响没那么大了。
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(property_height), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "property_height", y = "price_sqm") +
+  ggtitle("房价和层高之间的关系")
+```
+发现:
+
+
+-在高价房屋中，中层房屋的价格会更贵一些
+
+
+
+```{r}
+data_2 <-high_price_houses %>%
+  filter(is.na(near_subway)|near_subway=="近地铁")
+
+ggplot(data_2, aes(x = factor(near_subway ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "near_subway", y = "price_sqm") +
+  ggtitle("地铁对房屋单价的影响")
+```
+发现:
+
+-有无地铁对高价房屋来说没有总体那么显著，可能是因为有钱人一般都有车。
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(decoration ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "decoration", y = "price_sqm") +
+  ggtitle("装修对房屋单价的影响")
+```
+发现:
+
+-对于高价房屋来说，毛坯房的价格反而会更高一些。
+
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(property_style), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "decoration", y = "price_sqm") +
+  ggtitle("建筑形式对房屋单价的影响")
+```
+发现:
+
+-在高价房屋里面，塔楼的价格显著要与板楼
+
+-板塔结合的房屋价格相差极大
+
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(directions1 ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "directions1", y = "price_sqm") +
+  ggtitle("房屋朝向对房价的影响")
+```
+发现:
+
+-在高价房屋中，主要房屋朝东价格更高
+
+-主要房屋朝南的价格相差极大
+
+```{r}
+ggplot(high_price_houses, aes(x = factor(if_2y ), y = price_sqm)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(x = "if_2y", y = "price_sqm") +
+  ggtitle("房本是否满两年")
+```
+发现:
+
+-在高价房屋中，满两年的房子价格更高
+
+
+# 发现总结
+
+从总体数据来看，1.5元/平的房源是武汉二手市场交易的主流，在这个价格区间内，中位数和均值相差不大，可供选择的范围比较多，可以综合考虑是否临近地铁，楼层建筑形式，楼层，装修等级等因素。
+
+对于3万以上高价格的房子来说，地理位置、朝向、大小、楼层建筑形式对房价的影响更高一些。可能是因为买家不再是以价格优先，会更多的考虑舒适度和使用价值。与普通房源相比，毛坯高价房反而能卖出更高价格。高价房的买家也会关注地铁、房龄等因素，但是相对而言重视度没那么高，他们不是高价房屋价值的决定性因素。
